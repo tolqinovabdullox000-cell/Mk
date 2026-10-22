@@ -2,33 +2,25 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const DEMO = [
-  { label: 'Admin', username: 'admin', password: 'admin123' },
-  { label: 'Ustoz', username: 'ustoz', password: 'ustoz123' },
-  { label: "O'quvchi", username: 'oquvchi', password: 'oquvchi123' },
-  { label: 'Ota-ona', username: 'ota-ona', password: 'ota123' },
-];
-
 export default function Login() {
-  const { user, login } = useAuth();
+  const { user, login, authError } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   if (user) return <Navigate to={`/${user.role}`} replace />;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = login(username, password);
-    if (res.ok) navigate(`/${res.user.role}`, { replace: true });
-    else setError(res.error);
-  };
-
-  const fillDemo = (d) => {
-    setUsername(d.username);
-    setPassword(d.password);
     setError('');
+    try {
+      const res = await login(email, password);
+      if (res.ok) navigate(`/${res.user.role}`, { replace: true });
+      else setError(res.error);
+    } catch (loginError) {
+      setError(`Kirishda xatolik: ${loginError.message}`);
+    }
   };
 
   return (
@@ -37,26 +29,15 @@ export default function Login() {
         <h1>📚 UstozPanel</h1>
         <p className="muted">Hisobingizga kiring</p>
 
-        <label>Login</label>
-        <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+        <label htmlFor="email">Elektron pochta</label>
+        <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />
 
-        <label>Parol</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <label htmlFor="password">Parol</label>
+        <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
 
-        {error && <div className="error">{error}</div>}
+        {(error || authError) && <div className="error" role="alert">{error || authError}</div>}
 
         <button className="btn btn-primary" type="submit">Kirish</button>
-
-        <div className="demo-box">
-          <p className="muted">Demo hisoblar (bosib to'ldiring):</p>
-          <div className="demo-list">
-            {DEMO.map((d) => (
-              <button key={d.username} type="button" className="btn btn-outline" onClick={() => fillDemo(d)}>
-                {d.label}
-              </button>
-            ))}
-          </div>
-        </div>
       </form>
     </div>
   );

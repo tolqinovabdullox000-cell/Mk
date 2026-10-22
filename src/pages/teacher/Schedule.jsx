@@ -1,50 +1,92 @@
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { get } from '../../lib/storage';
+import { supabase } from '../../lib/supabase';
 
 const DAYS = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
-const todayIdx = (new Date().getDay() + 6) % 7;
+const today = (new Date().getDay() + 6) % 7 + 1;
 
 export default function Schedule() {
   const { user } = useAuth();
+  const [lessons, setLessons] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Faqat shu ustozga biriktirilgan darslar
-  const mine = get('lessons', []).filter((l) => l.teacherId === user.id);
+  useEffect(() => {
+    let active = true;
 
-  // JS da yakshanba = 0, bizda dushanba = 0 bo'lishi uchun
+    async function loadSchedule() {
+      setLoading(true);
+      setError('');
+      if (!supabase) {
+        setError('Supabase sozlanmagan. .env faylini tekshiring.');
+        setLoading(false);
+        return;
+      }
+
+      const { data: teacher, error: teacherError } = await supabase
+        .from('teachers')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+      if (!active) return;
+      if (teacherError) {
+        setError(`Ustoz profilini topishda xatolik: ${teacherError.message}`);
+        setLoading(false);
+        return;
+      }
+      if (!teacher) {
+        setError('Ustoz profilingiz tizimga bog‘lanmagan. Administratorga murojaat qiling.');
+        setLoading(false);
+        return;
+      }
+
+      const { data, error: lessonError } = await supabase
+        .from('lessons')
+        .select('id, subject, weekday, lesson_no, room, classes(grade, letter)')
+        .eq('teacher_id', teacher.id)
+        .order('weekday')
+        .order('lesson_no');
+
+      if (!active) return;
+      if (lessonError) setError(`Jadvalni yuklashda xatolik: ${lessonError.message}`);
+      else setLessons(data ?? []);
+      setLoading(false);
+    }
+
+    loadSchedule().catch((loadError) => {
+      if (!active) return;
+      setError(`Jadvalni yuklashda xatolik: ${loadError.message}`);
+      setLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [user.id]);
+
   return (
-    <div>
-      <h2>Dars jadvali</h2>
-
-      {mine.length === 0 && (
-        <div className="card">
-          <p className="muted">Sizga hali dars biriktirilmagan. Admin dars qo'shgach, shu yerda ko'rinadi.</p>
+    <section>
+      <div className="page-heading"><div><p className="eyebrow">USTOZ PANELI</p><h1>Dars jadvali</h1><p className="muted">Haftalik darslaringiz.</p></div></div>
+      {error && <div className="error notice" role="alert">{error}</div>}
+      {loading ? <div className="card"><p className="muted">Jadval yuklanmoqda...</p></div> : (
+        <div className="teacher-week">
+          {DAYS.map((day, index) => {
+            const dayLessons = lessons.filter((lesson) => lesson.weekday === index + 1);
+            return (
+              <div key={day} className={`card day-card ${today === index + 1 ? 'today' : ''}`}>
+                <h2>{day} {today === index + 1 && <span className="badge">Bugun</span>}</h2>
+                {dayLessons.length === 0 ? <p className="muted">Dars yo'q</p> : dayLessons.map((lesson) => (
+                  <div key={lesson.id} className="lesson">
+                    <span className="lesson-time">{lesson.lesson_no}-dars</span>
+                    <span><strong>{lesson.subject}</strong> · {lesson.classes?.grade}-{lesson.classes?.letter} · {lesson.room}-xona</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
-
-      {mine.length > 0 &&
-        DAYS.map((dayName, idx) => {
-          const dayLessons = mine
-            .filter((l) => l.day === idx)
-            .sort((a, b) => a.start.localeCompare(b.start));
-
-          return (
-            <div key={dayName} className={'card day-card' + (idx === todayIdx ? ' today' : '')}>
-              <h3>
-                {dayName} {idx === todayIdx && <span className="badge">Bugun</span>}
-              </h3>
-              {dayLessons.length === 0 ? (
-                <p className="muted">Dars yo'q</p>
-              ) : (
-                dayLessons.map((l) => (
-                  <div key={l.id} className="lesson">
-                    <span className="lesson-time">{l.start}-{l.end}</span>
-                    <span><strong>{l.subject}</strong> · {l.className} · {l.room}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          );
-        })}
-    </div>
+    </section>
   );
 }
