@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
@@ -9,11 +9,14 @@ import TeacherSchedule from './pages/teacher/Schedule';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
 import AdminSchedule from './pages/admin/Schedule';
+import Loading from './components/ui/Loading';
+import { useI18n } from './i18n/useI18n';
 
 // Navbar + Sidebar + sahifa mazmuni (<Outlet />)
 function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { authError } = useAuth();
+  const { t } = useI18n();
 
   return (
     <div className="app-shell">
@@ -21,7 +24,7 @@ function Layout() {
       <div className="app-main">
         <Navbar onMenuClick={() => setSidebarOpen((o) => !o)} />
         <main className="content">
-          {authError && <div className="error notice" role="alert">{authError}</div>}
+          {authError && <div className="error notice" role="alert">{t(authError)}</div>}
           <Outlet />
         </main>
       </div>
@@ -31,16 +34,17 @@ function Layout() {
 
 // Faqat o'z roli kirishi mumkin. Boshqa rol bo'lsa, o'z paneliga qaytaramiz.
 function RequireRole({ allow }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="page-message">Yuklanmoqda...</div>;
+  const { user, loading, mustChangePassword } = useAuth();
+  if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
+  if (mustChangePassword) return <Navigate to="/account" replace />;
   if (user.role !== allow) return <Navigate to={`/${user.role}`} replace />;
   return <Layout />;
 }
 
 function HomeRedirect() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="page-message">Yuklanmoqda...</div>;
+  if (loading) return <Loading />;
   return <Navigate to={user ? `/${user.role}` : '/login'} replace />;
 }
 

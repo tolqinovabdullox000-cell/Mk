@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 
-// Fan nomlari ro'yxati (Users.jsx dagi bilan bir xil bo'lsin)
 const SUBJECTS = [
   "Ona tili", "Adabiyot", "Matematika", "Algebra", "Geometriya", "Fizika",
   "Kimyo", "Biologiya", "Tarix", "Geografiya", "Ingliz tili", "Rus tili",

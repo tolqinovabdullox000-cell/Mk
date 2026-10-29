@@ -1,8 +1,7 @@
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { get, set } from '../lib/storage';
-
-const ThemeContext = createContext(null);
+import { ThemeContext } from './ThemeContextValue';
 
 function getInitialTheme() {
   const saved = get('theme');
@@ -26,10 +25,4 @@ export function ThemeProvider({ children }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('useTheme faqat ThemeProvider ichida ishlatiladi');
-  return ctx;
 }

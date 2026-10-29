@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react';
-
 // Boshqa saytlar bilan kalitlar aralashib ketmasligi uchun prefiks
 const PREFIX = 'ustozpanel:';
 
@@ -26,15 +24,4 @@ export function set(key, value) {
 
 export function remove(key) {
   localStorage.removeItem(PREFIX + key);
-}
-
-// useState + useEffect bilan bog'lash: qiymat o'zgarsa, avtomatik saqlanadi
-export function useStorage(key, initialValue) {
-  const [value, setValue] = useState(() => get(key, initialValue));
-
-  useEffect(() => {
-    set(key, value);
-  }, [key, value]);
-
-  return [value, setValue];
 }

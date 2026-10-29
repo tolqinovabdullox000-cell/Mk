@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../context/useAuth';
+import { useI18n } from '../i18n/useI18n';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function Login() {
   const { user, login, authError } = useAuth();
-  const navigate = useNavigate();
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,28 +18,28 @@ export default function Login() {
     setError('');
     try {
       const res = await login(email, password);
-      if (res.ok) navigate(`/${res.user.role}`, { replace: true });
-      else setError(res.error);
+      if (!res.ok) setError(res.error);
     } catch (loginError) {
-      setError(`Kirishda xatolik: ${loginError.message}`);
+      setError('auth.invalidCredentials');
     }
   };
 
   return (
     <div className="login-page">
+      <div className="login-language"><LanguageSwitcher /></div>
       <form className="card login-card" onSubmit={handleSubmit}>
         <h1>📚 UstozPanel</h1>
-        <p className="muted">Hisobingizga kiring</p>
+        <p className="muted">{t('auth.loginTitle')}</p>
 
-        <label htmlFor="email">Elektron pochta</label>
+        <label htmlFor="email">{t('auth.email')}</label>
         <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />
 
-        <label htmlFor="password">Parol</label>
+        <label htmlFor="password">{t('auth.password')}</label>
         <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
 
-        {(error || authError) && <div className="error" role="alert">{error || authError}</div>}
+        {(error || authError) && <div className="error" role="alert">{t(error || authError)}</div>}
 
-        <button className="btn btn-primary" type="submit">Kirish</button>
+        <button className="btn btn-primary" type="submit">{t('auth.login')}</button>
       </form>
     </div>
   );

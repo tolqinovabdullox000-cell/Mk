@@ -1,29 +1,23 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
+import { useI18n } from '../i18n/useI18n';
 
-// Har rol uchun menyu. Yangi sahifa qo'shilsa, shu yerga bitta qator qo'shamiz.
 const MENUS = {
   admin: [
-    { to: '/admin', label: 'Bosh sahifa', icon: '🏠', end: true },
-    { to: '/admin/users', label: 'Foydalanuvchilar', icon: '👥' },
-    { to: '/admin/schedule', label: 'Sinflar va jadval', icon: '🗓️' },
+    { to: '/admin', key: 'navigation.home', icon: '🏠', end: true },
+    { to: '/admin/users', key: 'navigation.users', icon: '👥' },
+    { to: '/admin/schedule', key: 'navigation.schedule', icon: '🗓️' },
   ],
   teacher: [
-    { to: '/teacher', label: 'Bosh sahifa', icon: '🏠', end: true },
-    { to: '/teacher/schedule', label: 'Dars jadvali', icon: '🗓️' },
+    { to: '/teacher', key: 'navigation.home', icon: '🏠', end: true },
+    { to: '/teacher/schedule', key: 'navigation.schedule', icon: '🗓️' },
   ],
 };
 
 export default function Sidebar({ open, onClose }) {
-  const { role, logout } = useAuth();
-  const navigate = useNavigate();
+  const { role } = useAuth();
+  const { t } = useI18n();
   const items = MENUS[role] ?? [];
-
-  const handleLogout = async () => {
-    await logout();
-    onClose();
-    navigate('/login', { replace: true });
-  };
 
   return (
     <>
@@ -39,15 +33,9 @@ export default function Sidebar({ open, onClose }) {
               className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
             >
               <span>{item.icon}</span>
-              {item.label}
+              {t(item.key)}
             </NavLink>
           ))}
-          {role === 'admin' && (
-            <button className="nav-link sidebar-logout" type="button" onClick={handleLogout}>
-              <span aria-hidden="true">↪</span>
-              Chiqish
-            </button>
-          )}
         </nav>
       </aside>
       {open && <div className="backdrop" onClick={onClose} />}
