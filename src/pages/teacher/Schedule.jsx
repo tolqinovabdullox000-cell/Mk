@@ -1,85 +1,32 @@
-import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/useAuth';
-import { supabase } from '../../lib/supabase';
-
-const DAYS = ['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
-const today = (new Date().getDay() + 6) % 7 + 1;
+import ErrorNotice from '../../components/ui/ErrorNotice';
+import { useTeacherSchedule } from '../../hooks/useTeacherSchedule';
+import { toAppError } from '../../lib/api/client';
+import { DAYS } from '../../lib/constants';
+import { useToday } from '../../lib/dates';
+import { useI18n } from '../../i18n/useI18n';
 
 export default function Schedule() {
   const { user } = useAuth();
-  const [lessons, setLessons] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadSchedule() {
-      setLoading(true);
-      setError('');
-      if (!supabase) {
-        setError('Supabase sozlanmagan. .env faylini tekshiring.');
-        setLoading(false);
-        return;
-      }
-
-      const { data: teacher, error: teacherError } = await supabase
-        .from('teachers')
-        .select('id')
-        .eq('auth_user_id', user.id)
-        .maybeSingle();
-
-      if (!active) return;
-      if (teacherError) {
-        setError(`Ustoz profilini topishda xatolik: ${teacherError.message}`);
-        setLoading(false);
-        return;
-      }
-      if (!teacher) {
-        setError('Ustoz profilingiz tizimga bog‘lanmagan. Administratorga murojaat qiling.');
-        setLoading(false);
-        return;
-      }
-
-      const { data, error: lessonError } = await supabase
-        .from('lessons')
-        .select('id, subject, weekday, lesson_no, room, classes(grade, letter)')
-        .eq('teacher_id', teacher.id)
-        .order('weekday')
-        .order('lesson_no');
-
-      if (!active) return;
-      if (lessonError) setError(`Jadvalni yuklashda xatolik: ${lessonError.message}`);
-      else setLessons(data ?? []);
-      setLoading(false);
-    }
-
-    loadSchedule().catch((loadError) => {
-      if (!active) return;
-      setError(`Jadvalni yuklashda xatolik: ${loadError.message}`);
-      setLoading(false);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [user.id]);
+  const { t } = useI18n();
+  const { weekday } = useToday();
+  const { lessons, loading, error, teacherMissing } = useTeacherSchedule(user.id, weekday);
 
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">USTOZ PANELI</p><h1>Dars jadvali</h1><p className="muted">Haftalik darslaringiz.</p></div></div>
-      {error && <div className="error notice" role="alert">{error}</div>}
-      {loading ? <div className="card"><p className="muted">Jadval yuklanmoqda...</p></div> : (
+      <div className="page-heading"><div><p className="eyebrow">{t('dashboard.teacher')}</p><h1>{t('schedule.title')}</h1><p className="muted">{t('schedule.weekly')}</p></div></div>
+      <ErrorNotice>{teacherMissing ? t('dashboard.teacherMissing') : error && t(toAppError(error))}</ErrorNotice>
+      {loading ? <div className="card"><p className="muted">{t('common.loading')}</p></div> : (
         <div className="teacher-week">
-          {DAYS.map((day, index) => {
-            const dayLessons = lessons.filter((lesson) => lesson.weekday === index + 1);
+          {DAYS.filter((day) => day.value <= 6).map((day) => {
+            const dayLessons = lessons.filter((lesson) => lesson.weekday === day.value);
             return (
-              <div key={day} className={`card day-card ${today === index + 1 ? 'today' : ''}`}>
-                <h2>{day} {today === index + 1 && <span className="badge">Bugun</span>}</h2>
-                {dayLessons.length === 0 ? <p className="muted">Dars yo'q</p> : dayLessons.map((lesson) => (
+              <div key={day.value} className={`card day-card ${weekday === day.value ? 'today' : ''}`}>
+                <h2>{t(day.key)} {weekday === day.value && <span className="badge">{t('common.today')}</span>}</h2>
+                {dayLessons.length === 0 ? <p className="muted">{t('schedule.noLessons')}</p> : dayLessons.map((lesson) => (
                   <div key={lesson.id} className="lesson">
-                    <span className="lesson-time">{lesson.lesson_no}-dars</span>
-                    <span><strong>{lesson.subject}</strong> · {lesson.classes?.grade}-{lesson.classes?.letter} · {lesson.room}-xona</span>
+                    <span className="lesson-time">{t('schedule.period', { n: lesson.lesson_no })}</span>
+                    <span><strong>{t(`subjects.${lesson.subject}`)}</strong> · {lesson.classes?.grade}-{lesson.classes?.letter} · {t('schedule.roomNumber', { n: lesson.room })}</span>
                   </div>
                 ))}
               </div>

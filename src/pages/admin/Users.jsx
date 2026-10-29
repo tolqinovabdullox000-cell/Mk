@@ -1,61 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import BulkTeachers from '../../components/BulkTeachers';
-import { supabase } from '../../lib/supabase';
-
-const SUBJECTS = [
-  'Ona tili', 'Adabiyot', 'Matematika', 'Algebra', 'Geometriya', 'Fizika',
-  'Kimyo', 'Biologiya', 'Tarix', 'Geografiya', 'Ingliz tili', 'Rus tili',
-  'Informatika', 'Jismoniy tarbiya', 'Texnologiya', "Tasviriy san'at",
-  'Musiqa', 'Boshlang‘ich sinf',
-];
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ErrorNotice from '../../components/ui/ErrorNotice';
+import Modal from '../../components/ui/Modal';
+import { useAsync } from '../../hooks/useAsync';
+import { useI18n } from '../../i18n/useI18n';
+import { toAppError } from '../../lib/api/client';
+import { createTeacher, deleteTeacher, listTeachers } from '../../lib/api/teachers';
+import { SUBJECT_CODES } from '../../lib/constants';
+import { normalizePhone } from '../../lib/phone';
 
 const EMPTY_FORM = { full_name: '', phone: '', subjects: [] };
 
 export default function Users() {
-  const [teachers, setTeachers] = useState([]);
+  const { t } = useI18n();
   const [form, setForm] = useState(EMPTY_FORM);
   const [modalOpen, setModalOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
-
-  const reloadTeachers = () => setRefresh((value) => value + 1);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadTeachers() {
-      setLoading(true);
-      setError('');
-      if (!supabase) {
-        setError('Supabase sozlanmagan. .env faylini tekshiring.');
-        setLoading(false);
-        return;
-      }
-
-      const { data, error: queryError } = await supabase
-        .from('teachers')
-        .select('id, full_name, phone, subjects')
-        .order('full_name');
-
-      if (!active) return;
-      if (queryError) setError(`Ustozlarni yuklashda xatolik: ${queryError.message}`);
-      else setTeachers(data ?? []);
-      setLoading(false);
-    }
-
-    loadTeachers().catch((loadError) => {
-      if (!active) return;
-      setError(`Ustozlarni yuklashda xatolik: ${loadError.message}`);
-      setLoading(false);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [refresh]);
+  const [formError, setFormError] = useState('');
+  const [pageError, setPageError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const loadTeachers = useCallback(() => listTeachers(), []);
+  const { data, error: loadError, loading, reload } = useAsync(loadTeachers);
+  const teachers = data ?? [];
 
   const toggleSubject = (subject) => {
     setForm((current) => ({
@@ -69,58 +37,46 @@ export default function Users() {
   const closeModal = () => {
     setModalOpen(false);
     setForm(EMPTY_FORM);
-    setError('');
+    setFormError('');
   };
 
   const saveTeacher = async (event) => {
     event.preventDefault();
     if (!form.full_name.trim() || form.subjects.length === 0) {
-      setError("Ustozning F.I.Sh. va kamida bitta fanini kiriting.");
+      setFormError(t('teachers.required'));
       return;
     }
-    if (!supabase) {
-      setError('Supabase sozlanmagan. .env faylini tekshiring.');
+    const phone = form.phone.trim() ? normalizePhone(form.phone) : '';
+    if (phone === null) {
+      setFormError(t('teachers.invalidPhone'));
       return;
     }
-
     setSaving(true);
-    setError('');
+    setFormError('');
     try {
-      const { error: insertError } = await supabase.from('teachers').insert({
+      await createTeacher({
         full_name: form.full_name.trim(),
-        phone: form.phone.trim(),
+        phone,
         subjects: form.subjects,
       });
-      if (insertError) {
-        setError(`Ustozni saqlashda xatolik: ${insertError.message}`);
-        return;
-      }
       closeModal();
-      setRefresh((value) => value + 1);
-    } catch (insertError) {
-      setError(`Ustozni saqlashda xatolik: ${insertError.message}`);
+      reload();
+    } catch (cause) {
+      setFormError(t(toAppError(cause)));
     } finally {
       setSaving(false);
     }
   };
 
-  const removeTeacher = async (teacher) => {
-    if (!window.confirm(`${teacher.full_name} ustozni o'chirasizmi? Uning darslari ham o'chadi.`)) return;
-    if (!supabase) {
-      setError('Supabase sozlanmagan. .env faylini tekshiring.');
-      return;
-    }
-
-    setError('');
+  const confirmDelete = async () => {
+    setPageError('');
     try {
-      const { error: deleteError } = await supabase.from('teachers').delete().eq('id', teacher.id);
-      if (deleteError) {
-        setError(`Ustozni o'chirishda xatolik: ${deleteError.message}`);
-        return;
-      }
-      setRefresh((value) => value + 1);
-    } catch (deleteError) {
-      setError(`Ustozni o'chirishda xatolik: ${deleteError.message}`);
+      await deleteTeacher(deleteTarget.id);
+      setDeleteTarget(null);
+      reload();
+    } catch (cause) {
+      setPageError(t(toAppError(cause)));
+      setDeleteTarget(null);
     }
   };
 
@@ -128,29 +84,27 @@ export default function Users() {
     <section>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">ADMIN PANEL</p>
-          <h1>Foydalanuvchilar</h1>
-          <p className="muted">Ustozlar ro'yxati va fanlarini boshqaring.</p>
+          <p className="eyebrow">{t('dashboard.admin')}</p>
+          <h1>{t('teachers.title')}</h1>
+          <p className="muted">{t('teachers.description')}</p>
         </div>
         <div className="page-heading-actions">
-          <button className="btn btn-outline" type="button" onClick={() => setBulkOpen(true)}>
-            Ro'yxatdan yuklash
-          </button>
-          <button className="btn btn-primary" type="button" onClick={() => { setError(''); setModalOpen(true); }}>
-            <span aria-hidden="true">＋</span> Ustoz qo'shish
+          <button className="btn btn-outline" type="button" onClick={() => setBulkOpen(true)}>{t('teachers.import')}</button>
+          <button className="btn btn-primary" type="button" onClick={() => { setFormError(''); setModalOpen(true); }}>
+            <span aria-hidden="true">＋</span> {t('teachers.add')}
           </button>
         </div>
       </div>
 
-      {error && <div className="error notice" role="alert">{error}</div>}
+      <ErrorNotice>{pageError || (loadError && t(toAppError(loadError)))}</ErrorNotice>
 
       <div className="card table-wrap admin-table">
-        {loading ? <p className="muted">Yuklanmoqda...</p> : teachers.length === 0 ? (
-          <p className="muted">Hozircha ustozlar qo'shilmagan.</p>
+        {loading ? <p className="muted">{t('common.loading')}</p> : teachers.length === 0 ? (
+          <p className="muted">{t('teachers.noTeachers')}</p>
         ) : (
           <table>
             <thead>
-              <tr><th>№</th><th>F.I.Sh</th><th>Telefon</th><th>Fanlari</th><th>Amal</th></tr>
+              <tr><th>{t('teachers.number')}</th><th>{t('teachers.name')}</th><th>{t('teachers.phone')}</th><th>{t('teachers.subjects')}</th><th>{t('teachers.action')}</th></tr>
             </thead>
             <tbody>
               {teachers.map((teacher, index) => (
@@ -158,8 +112,8 @@ export default function Users() {
                   <td>{index + 1}</td>
                   <td className="strong-cell">{teacher.full_name}</td>
                   <td>{teacher.phone || '—'}</td>
-                  <td><div className="subject-list">{(teacher.subjects ?? []).map((subject) => <span className="subject-chip" key={subject}>{subject}</span>)}</div></td>
-                  <td><button className="btn btn-danger" type="button" onClick={() => removeTeacher(teacher)}>O'chirish</button></td>
+                  <td><div className="subject-list">{(teacher.subjects ?? []).map((code) => <span className="subject-chip" key={code}>{t(`subjects.${code}`)}</span>)}</div></td>
+                  <td><button className="btn btn-danger" type="button" onClick={() => setDeleteTarget(teacher)}>{t('common.delete')}</button></td>
                 </tr>
               ))}
             </tbody>
@@ -167,47 +121,50 @@ export default function Users() {
         )}
       </div>
 
-      {modalOpen && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeModal(); }}>
-          <form className="modal-card" onSubmit={saveTeacher} aria-labelledby="teacher-modal-title">
-            <div className="modal-heading">
-              <div><p className="eyebrow">YANGI FOYDALANUVCHI</p><h2 id="teacher-modal-title">Ustoz qo'shish</h2></div>
-              <button className="icon-btn" type="button" onClick={closeModal} aria-label="Yopish">×</button>
+      <Modal open={modalOpen} onClose={closeModal} title={t('teachers.add')} dirty={Boolean(form.full_name || form.phone || form.subjects.length)}>
+        <form onSubmit={saveTeacher}>
+          <label htmlFor="teacher-name">{t('teachers.name')}</label>
+          <input id="teacher-name" value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} required />
+          <label htmlFor="teacher-phone">{t('teachers.phone')}</label>
+          <input id="teacher-phone" type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+          <fieldset className="subject-fieldset">
+            <legend>{t('teachers.subjects')} <span className="muted">({t('teachers.minSubject')})</span></legend>
+            <div className="chip-list">
+              {SUBJECT_CODES.map((code) => (
+                <button
+                  className={`chip-button ${form.subjects.includes(code) ? 'selected' : ''}`}
+                  type="button"
+                  key={code}
+                  aria-pressed={form.subjects.includes(code)}
+                  onClick={() => toggleSubject(code)}
+                >
+                  {t(`subjects.${code}`)}
+                </button>
+              ))}
             </div>
-            <label htmlFor="teacher-name">F.I.Sh</label>
-            <input id="teacher-name" value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} required />
-            <label htmlFor="teacher-phone">Telefon</label>
-            <input id="teacher-phone" type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-            <fieldset className="subject-fieldset">
-              <legend>Fanlar <span className="muted">(kamida bittasini tanlang)</span></legend>
-              <div className="chip-list">
-                {SUBJECTS.map((subject) => (
-                  <button
-                    className={`chip-button ${form.subjects.includes(subject) ? 'selected' : ''}`}
-                    type="button"
-                    key={subject}
-                    aria-pressed={form.subjects.includes(subject)}
-                    onClick={() => toggleSubject(subject)}
-                  >
-                    {subject}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-            {error && <div className="error" role="alert">{error}</div>}
-            <div className="modal-actions">
-              <button className="btn btn-outline" type="button" onClick={closeModal}>Bekor qilish</button>
-              <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saqlanmoqda...' : 'Saqlash'}</button>
-            </div>
-          </form>
-        </div>
-      )}
+          </fieldset>
+          {formError && <div className="error" role="alert">{formError}</div>}
+          <div className="modal-actions">
+            <button className="btn btn-outline" type="button" onClick={closeModal}>{t('common.cancel')}</button>
+            <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>
+          </div>
+        </form>
+      </Modal>
+
       {bulkOpen && (
         <BulkTeachers
+          teachers={teachers}
           onClose={() => setBulkOpen(false)}
-          onDone={reloadTeachers}
+          onDone={reload}
         />
       )}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title={t('teachers.removeTitle')}
+        message={t('teachers.removeConfirm', { name: deleteTarget?.full_name ?? '' })}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
     </section>
   );
 }

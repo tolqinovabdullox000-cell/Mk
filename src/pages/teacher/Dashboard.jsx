@@ -1,86 +1,29 @@
-import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/useAuth';
-import { supabase } from '../../lib/supabase';
-
-const today = (new Date().getDay() + 6) % 7 + 1;
+import ErrorNotice from '../../components/ui/ErrorNotice';
+import { useTeacherSchedule } from '../../hooks/useTeacherSchedule';
+import { useToday } from '../../lib/dates';
+import { useI18n } from '../../i18n/useI18n';
+import { toAppError } from '../../lib/api/client';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [lessons, setLessons] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadToday() {
-      setLoading(true);
-      setError('');
-      if (!supabase) {
-        setError('Supabase sozlanmagan. .env faylini tekshiring.');
-        setLoading(false);
-        return;
-      }
-      if (today > 6) {
-        setLessons([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data: teacher, error: teacherError } = await supabase
-        .from('teachers')
-        .select('id')
-        .eq('auth_user_id', user.id)
-        .maybeSingle();
-
-      if (!active) return;
-      if (teacherError) {
-        setError(`Ustoz profilini topishda xatolik: ${teacherError.message}`);
-        setLoading(false);
-        return;
-      }
-      if (!teacher) {
-        setError('Ustoz profilingiz tizimga bog‘lanmagan. Administratorga murojaat qiling.');
-        setLoading(false);
-        return;
-      }
-
-      const { data, error: lessonError } = await supabase
-        .from('lessons')
-        .select('id, subject, weekday, lesson_no, room, classes(grade, letter)')
-        .eq('teacher_id', teacher.id)
-        .eq('weekday', today)
-        .order('lesson_no');
-
-      if (!active) return;
-      if (lessonError) setError(`Bugungi darslarni yuklashda xatolik: ${lessonError.message}`);
-      else setLessons(data ?? []);
-      setLoading(false);
-    }
-
-    loadToday().catch((loadError) => {
-      if (!active) return;
-      setError(`Bugungi darslarni yuklashda xatolik: ${loadError.message}`);
-      setLoading(false);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [user.id]);
+  const { t } = useI18n();
+  const { weekday } = useToday();
+  const { lessons, loading, error, teacherMissing } = useTeacherSchedule(user.id, weekday);
+  const todayLessons = lessons.filter((lesson) => lesson.weekday === weekday);
 
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">USTOZ PANELI</p><h1>Xush kelibsiz, {user.name}!</h1><p className="muted">Bugungi darslaringiz.</p></div></div>
-      {error && <div className="error notice" role="alert">{error}</div>}
+      <div className="page-heading"><div><p className="eyebrow">{t('dashboard.teacher')}</p><h1>{t('dashboard.welcome', { name: user.name })}</h1><p className="muted">{t('dashboard.teacherToday')}</p></div></div>
+      <ErrorNotice>{teacherMissing ? t('dashboard.teacherMissing') : error && t(toAppError(error))}</ErrorNotice>
       <div className="card">
-        <h2>Bugungi darslar</h2>
-        {today > 6 ? <p className="muted">Bugun yakshanba, dam olish kuni 🙂</p> : loading ? <p className="muted">Yuklanmoqda...</p> : lessons.length === 0 ? (
-          <p className="muted">Bugun sizga dars biriktirilmagan.</p>
-        ) : lessons.map((lesson) => (
+        <h2>{t('dashboard.todayLessons')}</h2>
+        {weekday === 7 ? <p className="muted">{t('dashboard.sundayRest')}</p> : loading ? <p className="muted">{t('common.loading')}</p> : todayLessons.length === 0 ? (
+          <p className="muted">{t('dashboard.noTeacherLessons')}</p>
+        ) : todayLessons.map((lesson) => (
           <div key={lesson.id} className="lesson">
-            <span className="lesson-time">{lesson.lesson_no}-dars</span>
-            <span><strong>{lesson.subject}</strong> · {lesson.classes?.grade}-{lesson.classes?.letter} · {lesson.room}-xona</span>
+            <span className="lesson-time">{t('schedule.period', { n: lesson.lesson_no })}</span>
+            <span><strong>{t(`subjects.${lesson.subject}`)}</strong> · {lesson.classes?.grade}-{lesson.classes?.letter} · {t('schedule.roomNumber', { n: lesson.room })}</span>
           </div>
         ))}
       </div>

@@ -1,30 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
-import { db } from '../lib/api/client';
+import { useEffect, useState } from 'react';
+import { db, isSupabaseConfigured } from '../lib/api/client';
 import { AuthContext } from './AuthContextValue';
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
+  const [authReady, setAuthReady] = useState(() => !isSupabaseConfigured());
   const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const sessionRef = useRef(session);
-  sessionRef.current = session;
+  const [resolvedFor, setResolvedFor] = useState(null);
+  const [authError, setAuthError] = useState(() => (
+    isSupabaseConfigured() ? '' : 'auth.notConfigured'
+  ));
   const userId = session?.user?.id ?? null;
 
   useEffect(() => {
-    let client;
-    try {
-      client = db();
-    } catch {
-      setAuthError('auth.notConfigured');
-      setAuthReady(true);
-      return undefined;
-    }
+    if (!isSupabaseConfigured()) return undefined;
+    const client = db();
 
     const { data: { subscription } } = client.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setAuthReady(true);
+      if (!nextSession) {
+        setProfile(null);
+        setResolvedFor(null);
+      } else {
+        setAuthError('');
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -33,14 +33,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let active = true;
 
-    if (!userId) {
-      setProfile(null);
-      setProfileLoading(false);
-      return () => { active = false; };
-    }
+    if (!userId) return () => { active = false; };
 
-    setProfileLoading(true);
-    setAuthError('');
+    if (resolvedFor === userId) return () => { active = false; };
+
     const client = db();
     client.from('profiles')
       .select('role, full_name')
@@ -56,7 +52,7 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        const authUser = sessionRef.current?.user;
+        const authUser = session?.user;
         setProfile({
           id: userId,
           email: authUser?.email ?? '',
@@ -72,11 +68,11 @@ export function AuthProvider({ children }) {
         }
       })
       .finally(() => {
-        if (active) setProfileLoading(false);
+        if (active) setResolvedFor(userId);
       });
 
     return () => { active = false; };
-  }, [userId]);
+  }, [userId, session, resolvedFor]);
 
   const login = async (email, password) => {
     setAuthError('');
@@ -99,8 +95,10 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const user = profile && session?.user?.id === profile.id ? profile : null;
-  const loading = !authReady || Boolean(userId && profileLoading);
+  const user = profile && session?.user?.id === profile.id
+    ? { ...profile, mustChangePassword: session.user.user_metadata?.must_change_password === true }
+    : null;
+  const loading = !authReady || Boolean(userId && resolvedFor !== userId);
 
   return (
     <AuthContext.Provider value={{

@@ -11,6 +11,7 @@ import AdminUsers from './pages/admin/Users';
 import AdminSchedule from './pages/admin/Schedule';
 import Loading from './components/ui/Loading';
 import { useI18n } from './i18n/useI18n';
+import Account from './pages/Account';
 
 // Navbar + Sidebar + sahifa mazmuni (<Outlet />)
 function Layout() {
@@ -33,7 +34,7 @@ function Layout() {
 }
 
 // Faqat o'z roli kirishi mumkin. Boshqa rol bo'lsa, o'z paneliga qaytaramiz.
-function RequireRole({ allow }) {
+export function RequireRole({ allow }) {
   const { user, loading, mustChangePassword } = useAuth();
   if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
@@ -48,10 +49,20 @@ function HomeRedirect() {
   return <Navigate to={user ? `/${user.role}` : '/login'} replace />;
 }
 
+function RequireAuth() {
+  const { user, loading } = useAuth();
+  if (loading) return <Loading />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Layout />;
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/account" element={<RequireAuth />}>
+        <Route index element={<Account />} />
+      </Route>
 
       <Route path="/teacher" element={<RequireRole allow="teacher" />}>
         <Route index element={<TeacherDashboard />} />

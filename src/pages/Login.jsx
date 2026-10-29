@@ -19,7 +19,7 @@ export default function Login() {
     try {
       const res = await login(email, password);
       if (!res.ok) setError(res.error);
-    } catch (loginError) {
+    } catch {
       setError('auth.invalidCredentials');
     }
   };

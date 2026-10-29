@@ -15,3 +15,17 @@ export async function listTeacherLessons(teacherId) {
   if (error) throw error;
   return data ?? [];
 }
+
+export async function createLesson(values) {
+  const { data, error } = await db().from('lessons')
+    .insert(values)
+    .select(LESSON_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteLesson(lessonId) {
+  const { error } = await db().from('lessons').delete().eq('id', lessonId);
+  if (error) throw error;
+}

@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 export const SCHOOL_TZ = 'Asia/Tashkent';
 
 function partsInSchoolTime(value) {

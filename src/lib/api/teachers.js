@@ -22,3 +22,20 @@ export async function countTeachers() {
   if (error) throw error;
   return count ?? 0;
 }
+
+export async function createTeacher(values) {
+  const { data, error } = await db().from('teachers').insert(values).select(COLUMNS).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTeacher(teacherId) {
+  const { error } = await db().from('teachers').delete().eq('id', teacherId);
+  if (error) throw error;
+}
+
+export async function bulkInsertTeachers(teachers) {
+  const { data, error } = await db().from('teachers').insert(teachers).select(COLUMNS);
+  if (error) throw error;
+  return data ?? [];
+}

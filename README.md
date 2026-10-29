@@ -14,7 +14,7 @@ UstozPanel — maktabdagi sinflar, o‘qituvchilar va haftalik dars jadvalini bo
 1. Node.js LTS va npm o‘rnating.
 2. `npm ci` buyrug‘i bilan paketlarni o‘rnating.
 3. `.env.example` faylidan `.env` nusxa oling va `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` qiymatlarini kiriting. Brauzerga faqat publishable/anon kalit beriladi. `service_role` kalitini frontend, `.env` yoki Git repository’ga hech qachon joylamang.
-4. Supabase migratsiyalarini quyidagi usullardan biri bilan qo‘llang.
+4. Ma’lumotlar bazasini zaxiralang, so‘ng `supabase/migrations/0001_baseline.sql`, `0002_subject_codes.sql` va `0003_shared_rooms.sql` fayllarini shu tartibda bajaring.
 5. `npm run dev` bilan mahalliy serverni ishga tushiring.
 
 `.env` mahalliy fayl bo‘lib, Git tomonidan kuzatilmaydi. Production uchun Vercel loyihasidagi **Settings → Environment Variables** bo‘limida ikkita `VITE_` qiymatni kiriting va deployment’ni qayta ishga tushiring.
@@ -23,23 +23,15 @@ UstozPanel — maktabdagi sinflar, o‘qituvchilar va haftalik dars jadvalini bo
 
 Migratsiyalar `supabase/migrations/` ichida raqam tartibida saqlanadi va mavjud ma’lumotlarni hisobga olgan holda bajariladi.
 
-**Supabase SQL Editor:** migratsiya fayllarini `0001_...sql` dan boshlab tartib bilan ochib, har birini to‘liq bajarib chiqing. Keyingisiga faqat oldingisi muvaffaqiyatli tugagach o‘ting.
+**Supabase SQL Editor:** avval database backup oling, so‘ng migration fayllarini `0001_baseline.sql` dan boshlab to‘liq va tartib bilan bajaring. Keyingisiga faqat oldingisi muvaffaqiyatli tugagach o‘ting. `0003_shared_rooms.sql` avvalgi jadvalda bir vaqtda band qilingan xonalar topsa, dublikatlarni ko‘rsatib to‘xtaydi; ma’lumotlarni tekshirib, so‘ng migratsiyani qayta bajaring.
 
-**Supabase CLI:** Supabase CLI o‘rnating va loyiha katalogidan:
-
-```sh
-npx supabase login
-npx supabase link --project-ref YOUR_PROJECT_REF
-npx supabase db push
-```
-
-RLS tekshiruvi (natija bo‘sh байх ёстой):
+RLS tekshiruvi (natija bo‘sh bo‘lishi kerak):
 
 ```sql
 select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
 ```
 
-RLS siyosatlarini sinov foydalanuvchilari bilan tekshiring: administrator ma’lumotlarni boshqaradi, o‘qituvchi esa faqat o‘ziga tegishli yozuvlarni ko‘rishi yoki o‘zgartirishi kerak.
+RLS siyosatlarini sinov foydalanuvchilari bilan tekshiring: administrator ma’lumotlarni boshqaradi, o‘qituvchi esa sinflar va darslarni ko‘rishi mumkin, ammo ularni boshqara olmaydi.
 
 ## Birinchi administrator
 
@@ -52,22 +44,12 @@ on conflict (id) do update
 set role = excluded.role, full_name = excluded.full_name;
 ```
 
-`AUTH_USER_UUID` o‘rniga Auth’dagi haqiqiy UUID’ni yozing. O‘qituvchi profillari `role = 'teacher'` qiymati bilan bog‘langan auth foydalanuvchisiga ega bo‘ladi.
-
-## Edge Function
-
-Teacher account boshqaruvi qo‘shilgach, funksiyani Supabase CLI orqali deploy qiling:
-
-```sh
-npx supabase functions deploy manage-teacher-account
-```
-
-`SUPABASE_URL` va `SUPABASE_SERVICE_ROLE_KEY` secret’larini Supabase Function secrets’ida sozlang. Service-role kalitini frontendga yoki Vercel’ning `VITE_` o‘zgaruvchilariga qo‘ymang.
+`AUTH_USER_UUID` o‘rniga Auth’dagi haqiqiy UUID’ni yozing. O‘qituvchi hisobida ham Supabase Auth foydalanuvchisi va `role = 'teacher'` profili bo‘lishi kerak.
 
 ## Rollar
 
 - `admin`: maktab ma’lumotlari va foydalanuvchilarni boshqaradi.
-- `teacher`: faqat o‘z darslari, sinflari va tegishli ma’lumotlariga ruxsat oladi.
+- `teacher`: ustozlar ro‘yxati, sinflar va darslarni ko‘radi, lekin ularni boshqara olmaydi.
 
 ## Papkalar
 
@@ -78,7 +60,6 @@ npx supabase functions deploy manage-teacher-account
 - `src/lib/`: Supabase, API, sana va validatsiya yordamchilari.
 - `src/pages/`: administrator va o‘qituvchi sahifalari.
 - `supabase/migrations/`: tartib raqamli SQL migratsiyalari.
-- `supabase/functions/`: server tomondagi Supabase Edge Function’lari.
 
 ## Buyruqlar
 

@@ -1,31 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-export function useAsync(loader, dependencies = []) {
-  const loaderRef = useRef(loader);
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
+export function useAsync(loader) {
+  const [result, setResult] = useState(null);
   const [revision, setRevision] = useState(0);
 
-  loaderRef.current = loader;
   const reload = useCallback(() => setRevision((value) => value + 1), []);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    Promise.resolve(loaderRef.current(controller.signal))
-      .then((result) => {
-        if (!controller.signal.aborted) setData(result);
+    Promise.resolve(loader(controller.signal))
+      .then((data) => {
+        if (!controller.signal.aborted) setResult({ loader, revision, data, error: null });
       })
       .catch((cause) => {
-        if (!controller.signal.aborted) setError(cause);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) setResult({ loader, revision, data: null, error: cause });
       });
     return () => controller.abort();
-  }, [...dependencies, revision]);
+  }, [loader, revision]);
 
-  return { data, error, loading, reload };
+  const currentResult = result?.loader === loader && result.revision === revision;
+  return {
+    data: currentResult ? result.data : null,
+    error: currentResult ? result.error : null,
+    loading: !currentResult,
+    reload,
+  };
 }

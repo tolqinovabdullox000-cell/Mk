@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/useI18n';
 
 export default function Modal({ open, onClose, title, dirty = false, children, labelledBy = 'dialog-title' }) {
@@ -7,6 +7,12 @@ export default function Modal({ open, onClose, title, dirty = false, children, l
   const backdropDown = useRef(false);
   const [confirming, setConfirming] = useState(false);
   const { t } = useI18n();
+
+  const requestClose = useCallback(() => {
+    if (dirty && !confirming) setConfirming(true);
+    else if (confirming) setConfirming(false);
+    else onClose();
+  }, [dirty, confirming, onClose]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -23,15 +29,9 @@ export default function Modal({ open, onClose, title, dirty = false, children, l
       document.removeEventListener('keydown', handleKeyDown);
       previousFocus.current?.focus?.();
     };
-  }, [open, dirty, confirming]);
+  }, [open, requestClose]);
 
   if (!open) return null;
-
-  function requestClose() {
-    if (dirty && !confirming) setConfirming(true);
-    else if (confirming) setConfirming(false);
-    else onClose();
-  }
 
   function handleBackdropUp(event) {
     if (event.target === event.currentTarget && backdropDown.current) requestClose();

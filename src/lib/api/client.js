@@ -9,11 +9,25 @@ export function db() {
   return supabase;
 }
 
+export function isSupabaseConfigured() {
+  return Boolean(supabase);
+}
+
+export async function updatePassword(password) {
+  const { data, error } = await db().auth.updateUser({
+    password,
+    data: { must_change_password: false },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export function toAppError(error) {
   const code = error?.code;
-  const constraint = error?.constraint ?? error?.details ?? '';
+  const constraint = error?.constraint ?? `${error?.message ?? ''} ${error?.details ?? ''}`;
   if (code === '23505') {
     if (/teacher_weekday_no/i.test(constraint)) return 'errors.teacherBusy';
+    if (/lessons_room_weekday_no_key/i.test(constraint)) return 'errors.roomBusy';
     if (/room_weekday_no/i.test(constraint)) return 'errors.roomBusy';
     if (/class_weekday_no/i.test(constraint)) return 'errors.classBusy';
     return 'errors.duplicate';

@@ -1,93 +1,93 @@
-import { useState } from "react";
-import { supabase } from "../lib/supabase";
+import { useState } from 'react';
+import { useI18n } from '../i18n/useI18n';
+import { toAppError } from '../lib/api/client';
+import { bulkInsertTeachers } from '../lib/api/teachers';
+import { normalizePhone } from '../lib/phone';
+import { subjectCodeFromValue } from '../lib/subjectCodes';
+import Modal from './ui/Modal';
 
-const SUBJECTS = [
-  "Ona tili", "Adabiyot", "Matematika", "Algebra", "Geometriya", "Fizika",
-  "Kimyo", "Biologiya", "Tarix", "Geografiya", "Ingliz tili", "Rus tili",
-  "Informatika", "Jismoniy tarbiya", "Texnologiya", "Tasviriy san'at",
-  "Musiqa", "Boshlang'ich sinf",
-];
-const norm = (s) => s.toLowerCase().replace(/[’`‘]/g, "'").trim();
+function normalizeName(value) {
+  return value.normalize('NFC').trim().toLocaleLowerCase('uz');
+}
 
-export default function BulkTeachers({ onClose, onDone }) {
-  const [text, setText] = useState("");
+export default function BulkTeachers({ teachers, onClose, onDone }) {
+  const { t } = useI18n();
+  const [text, setText] = useState('');
   const [preview, setPreview] = useState(null);
-  const [msg, setMsg] = useState("");
+  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   function parse() {
     const ok = [];
     const bad = [];
-    text.split("\n").forEach((line, i) => {
+    const names = new Set(teachers.map((teacher) => normalizeName(teacher.full_name)));
+    text.split(/\r?\n/).forEach((line, index) => {
       if (!line.trim()) return;
-      const parts = line.split(/\t|;/).map((p) => p.trim());
+      const parts = line.split(/\t|;/).map((part) => part.trim());
       const full_name = parts[0];
-      const phone = parts[1] || null;
-      const subjects = [];
-      const unknown = [];
-      (parts[2] || "").split(",").map((s) => s.trim()).filter(Boolean).forEach((s) => {
-        const found = SUBJECTS.find((x) => norm(x) === norm(s));
-        if (found) subjects.push(found);
-        else unknown.push(s);
-      });
-      if (!full_name) bad.push(`${i + 1}-qator: ism yo'q`);
-      else if (subjects.length === 0) bad.push(`${i + 1}-qator (${full_name}): fan topilmadi ${unknown.join(", ")}`);
-      else {
-        if (unknown.length) bad.push(`${i + 1}-qator (${full_name}): noma'lum fan o'tkazib yuborildi: ${unknown.join(", ")}`);
+      const rawPhone = parts[1] ?? '';
+      const phone = rawPhone ? normalizePhone(rawPhone) : '';
+      const subjects = [...new Set((parts[2] ?? '')
+        .split(',')
+        .map((value) => subjectCodeFromValue(value))
+        .filter(Boolean))];
+      const row = index + 1;
+      if (!full_name) {
+        bad.push(t('bulk.rowName', { n: row }));
+      } else if (names.has(normalizeName(full_name))) {
+        bad.push(t('bulk.duplicate', { n: row, name: full_name }));
+      } else if (rawPhone && phone === null) {
+        bad.push(t('bulk.invalidPhone', { n: row, name: full_name }));
+      } else if (subjects.length === 0) {
+        bad.push(t('bulk.noSubjects', { n: row, name: full_name }));
+      } else {
+        names.add(normalizeName(full_name));
         ok.push({ full_name, phone, subjects });
       }
     });
     setPreview({ ok, bad });
-    setMsg("");
+    setError('');
   }
 
   async function save() {
-    if (!supabase) {
-      setMsg("Supabase sozlanmagan. .env faylini tekshiring.");
-      return;
-    }
-
     setBusy(true);
-    setMsg("");
+    setError('');
     try {
-      const { error } = await supabase.from("teachers").insert(preview.ok);
-      if (error) {
-        setMsg("Xatolik: " + error.message);
-        return;
-      }
+      await bulkInsertTeachers(preview.ok);
       onDone();
       onClose();
-    } catch (error) {
-      setMsg("Xatolik: " + error.message);
+    } catch (cause) {
+      setError(t(toAppError(cause)));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="modal-bg" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Ustozlarni ommaviy qo'shish</h3>
-        <p>Har qatorda: <b>Ism ; telefon ; fan1, fan2</b> (Excel'dan nusxalab ham bo'ladi)</p>
-        <textarea rows={10} value={text} onChange={(e) => { setText(e.target.value); setPreview(null); }}
-          placeholder="Karimov Akmal ; 901234567 ; Matematika, Algebra" />
-        {!preview && <button type="button" onClick={parse} disabled={!text.trim()}>Tekshirish</button>}
-        {preview && (
-          <>
-            <p><b>{preview.ok.length}</b> ta ustoz qo'shiladi.</p>
-            {preview.bad.length > 0 && (
-              <div className="error">{preview.bad.map((b) => <div key={b}>{b}</div>)}</div>
-            )}
-            {preview.ok.length > 0 && (
-              <button type="button" onClick={save} disabled={busy}>
-                {busy ? "Saqlanmoqda..." : `${preview.ok.length} ta ustozni saqlash`}
-              </button>
-            )}
-          </>
-        )}
-        {msg && <p className="error">{msg}</p>}
-        <button type="button" onClick={onClose}>Yopish</button>
-      </div>
-    </div>
+    <Modal open onClose={onClose} title={t('bulk.title')} dirty={Boolean(text)}>
+      <p>{t('bulk.format')}</p>
+      <textarea
+        rows={10}
+        value={text}
+        onChange={(event) => { setText(event.target.value); setPreview(null); }}
+        placeholder={t('bulk.placeholder')}
+      />
+      {!preview && <button className="btn btn-outline" type="button" onClick={parse} disabled={!text.trim()}>{t('bulk.validate')}</button>}
+      {preview && (
+        <>
+          <p>{t('bulk.addCount', { n: preview.ok.length })}</p>
+          {preview.bad.length > 0 && (
+            <div className="error" role="alert">{preview.bad.map((message, index) => <div key={`${index}-${message}`}>{message}</div>)}</div>
+          )}
+          {preview.ok.length > 0 && (
+            <button className="btn btn-primary" type="button" onClick={save} disabled={busy}>
+              {busy ? t('common.saving') : t('bulk.saveCount', { n: preview.ok.length })}
+            </button>
+          )}
+        </>
+      )}
+      {error && <div className="error" role="alert">{error}</div>}
+      <div className="modal-actions"><button className="btn btn-outline" type="button" onClick={onClose}>{t('common.close')}</button></div>
+    </Modal>
   );
 }
